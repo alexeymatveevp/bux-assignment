@@ -3,6 +3,7 @@ package com.alexeymatveev.buxassignment;
 import com.alexeymatveev.buxassignment.config.LoggingConfig;
 import com.alexeymatveev.buxassignment.model.Result;
 import com.alexeymatveev.buxassignment.model.order.BuyOrderResponse;
+import com.alexeymatveev.buxassignment.model.order.DirectionType;
 import com.alexeymatveev.buxassignment.model.order.SellOrderResponse;
 import com.alexeymatveev.buxassignment.service.OrderService;
 import com.alexeymatveev.buxassignment.util.SomeData;
@@ -27,7 +28,7 @@ public class TestOrderService {
     public void testBuySellOrder() {
         OrderService orderService = new OrderService();
 
-        Result<BuyOrderResponse> buyOrderResult = orderService.buyOrder(SomeData.SOME_PRODUCT_IDS.get(0), 200f, 1);
+        Result<BuyOrderResponse> buyOrderResult = orderService.buyOrder(SomeData.SOME_PRODUCT_IDS.get(0), 200f, 1, DirectionType.BUY);
         assertTrue(buyOrderResult.isSuccessful());
         assertNotNull(buyOrderResult.getData());
         String positionId = buyOrderResult.getData().getPositionId();

@@ -7,7 +7,7 @@ import com.alexeymatveev.buxassignment.model.message.*;
 import com.alexeymatveev.buxassignment.service.TradingBot;
 import com.alexeymatveev.buxassignment.util.ParseUtils;
 import com.alexeymatveev.buxassignment.util.SomeData;
-import com.alexeymatveev.buxassignment.websocket.WebsocketClientEndpoint;
+import com.alexeymatveev.buxassignment.websocket.BUXWebsocketClientEndpoint;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,14 +60,14 @@ public class SingleBotStarter {
         Float lowerLimit = ParseUtils.parseFloatOrDefault(lowerLimitScanned, null);
         Float upperLimit = ParseUtils.parseFloatOrDefault(upperLimitScanned, null);
 
-        WebsocketClientEndpoint clientEndPoint = new WebsocketClientEndpoint(new URI(webSocketUrl));
+        BUXWebsocketClientEndpoint clientEndPoint = new BUXWebsocketClientEndpoint(new URI(webSocketUrl));
 
         // init the bot
         TradingBot bot = new TradingBot(clientEndPoint, productId, buyPrice, lowerLimit, upperLimit);
         bot.addOnCompleteListener(stopProgramLatch::countDown);
 
         // wait for connect message and start the bot
-        WebsocketClientEndpoint.OnMessageHandler connectHandler = new WebsocketClientEndpoint.OnMessageHandler() {
+        BUXWebsocketClientEndpoint.OnMessageHandler connectHandler = new BUXWebsocketClientEndpoint.OnMessageHandler() {
             @Override
             public void handleMessage(String message) {
                 try {
@@ -75,7 +75,7 @@ public class SingleBotStarter {
                     if (msg.getT() == MsgType.CONNECT_CONNECTED) {
                         // connected - start the bot
                         LOGGER.info("Web socket connection OK.");
-                        clientEndPoint.removeMessageHandler(this);
+                        clientEndPoint.removeMessageListener(this);
                         bot.start();
                     }
                 } catch (IOException e) {
@@ -83,7 +83,7 @@ public class SingleBotStarter {
                 }
             }
         };
-        clientEndPoint.addMessageHandler(connectHandler);
+        clientEndPoint.addMessageListener(connectHandler);
 
         // connect to web socket
         clientEndPoint.connect();

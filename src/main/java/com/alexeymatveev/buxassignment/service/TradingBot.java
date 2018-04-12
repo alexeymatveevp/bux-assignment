@@ -6,15 +6,15 @@ import com.alexeymatveev.buxassignment.model.message.*;
 import com.alexeymatveev.buxassignment.model.order.BuyOrderResponse;
 import com.alexeymatveev.buxassignment.model.order.DirectionType;
 import com.alexeymatveev.buxassignment.model.order.SellOrderResponse;
-import com.alexeymatveev.buxassignment.websocket.WebsocketClientEndpoint;
+import com.alexeymatveev.buxassignment.websocket.BUXWebsocketClientEndpoint;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Created by Alexey Matveev on 4/10/2018.
@@ -27,11 +27,13 @@ public class TradingBot {
 
     private ObjectMapper objectMapper = new CommonObjectMapper();
 
-    private List<OnCompleteHandler> onCompleteHandlerListeners = new CopyOnWriteArrayList<>();
+    private List<OnCompleteListener> onCompleteListenerListeners = new CopyOnWriteArrayList<>();
 
     private List<OnProfitAndLossListener> onProfitAndLossListeners = new CopyOnWriteArrayList<>();
 
-    private WebsocketClientEndpoint webSocketEndpoint;
+    private ReentrantLock botLock = new ReentrantLock();
+
+    private BUXWebsocketClientEndpoint webSocketEndpoint;
 
     private String productId;
 
@@ -43,7 +45,7 @@ public class TradingBot {
 
     private String currentPositionId;
 
-    public TradingBot(WebsocketClientEndpoint webSocketEndpoint, String productId, Float buyPrice, Float lowerLimit, Float upperLimit) {
+    public TradingBot(BUXWebsocketClientEndpoint webSocketEndpoint, String productId, Float buyPrice, Float lowerLimit, Float upperLimit) {
         this.webSocketEndpoint = webSocketEndpoint;
         this.productId = productId;
         this.buyPrice = buyPrice;
@@ -52,79 +54,57 @@ public class TradingBot {
     }
 
     public void start() {
-        webSocketEndpoint.addMessageHandler((message) -> {
-            try {
-                // get and parse the message
-                BaseTMsg msg = objectMapper.readValue(message, BaseTMsg.class);
-
-                // perform msg actions
-                if (msg.getT() != MsgType.UNKNOWN) {
-                    switch (msg.getT()) {
-                        case CONNECT_CONNECTED:
-                            // subscription successful - ready to receive messages
-                            LOGGER.info("Web socket connection OK.");
-                            SubscribeMsg subscribeMsg = MsgFactory.createSubscribeMsg(productId);
-                            String subscribeMsgJson = objectMapper.writeValueAsString(subscribeMsg);
-                            webSocketEndpoint.sendMessage(subscribeMsgJson);
-                            break;
-                        case CONNECT_FAILED:
-                            // skip for now
-                            LOGGER.error("Failure: " + msg.getBody());
-                        case TRADING_QUOTE:
-                            TradingQuoteMsg body = (TradingQuoteMsg) msg.getBody();
-                            String currentProductId = body.getSecurityId();
-                            // check price only for bot-configured product
-                            if (currentProductId.equals(productId)) {
-                                String currentPriceText = body.getCurrentPrice();
-                                Float currentPrice = Float.parseFloat(currentPriceText);
-                                // if price not set - buy first price
-                                buyPrice = buyPrice == null ? currentPrice : buyPrice;
-                                if (currentPositionId == null && buyPrice <= currentPrice) {
-                                    // OK, buy order
-                                    // as said: amount, leverage doesn't matter and direction=BUY always for now
-                                    LOGGER.info("Buying order for product: " + productId);
-                                    Result<BuyOrderResponse> buyOrderResult = orderService.buyOrder(productId, 200f, 1, DirectionType.BUY);
-                                    if (buyOrderResult.isSuccessful()) {
-                                        BuyOrderResponse buyOrderResponse = buyOrderResult.getData();
-                                        // get currentPositionId and price
-                                        LOGGER.info("Position opened for product: " + productId + " , price=" + buyOrderResponse.getPrice().getAmount());
-                                        currentPositionId = buyOrderResponse.getPositionId();
-                                    } else {
-                                        LOGGER.error("Cannot buy order: " + buyOrderResult.getErrorMsg());
-                                    }
-                                } else {
-                                    // check if price is outside bounds
-                                    lowerLimit = lowerLimit == null ? buyPrice - 1: lowerLimit;
-                                    upperLimit = upperLimit == null ? buyPrice + 1 : upperLimit;
-                                    LOGGER.info("buy price = " + buyPrice + " , lower limit = " + lowerLimit
-                                            + " , current price = " + currentPrice + " , " + " , upper limit = " + upperLimit );
-                                    if (currentPrice < lowerLimit || currentPrice > upperLimit) {
-                                        // if yes - close position and unsubscribe
-                                        if (currentPrice < lowerLimit) {
-                                            LOGGER.info("Price is lower then lower limit: " + currentPrice + " < " + lowerLimit + " - closing position");
-                                        } else {
-                                            LOGGER.info("Price is more then upper limit: " + currentPrice + " > " + upperLimit + " - closing position");
-                                        }
-                                        LOGGER.info("Selling order: " + currentPositionId);
-                                        Result<SellOrderResponse> sellOrderResponseResult = orderService.sellOrder(currentPositionId);
-                                        if (sellOrderResponseResult.isSuccessful()) {
-                                            Float profitAndLoss = sellOrderResponseResult.getData().getProfitAndLoss().getAmount();
-                                            onProfitAndLossListeners.forEach((handler) -> handler.onProfitAndLoss(profitAndLoss));
-                                        }
-                                        LOGGER.info("Unsubscribing from " + productId);
-                                        SubscribeMsg unsubscribeMsg = MsgFactory.createUnsubscribeMsg(productId);
-                                        String unsubscribeMsgJson = objectMapper.writeValueAsString(unsubscribeMsg);
-                                        webSocketEndpoint.sendMessage(unsubscribeMsgJson);
-
-                                        // notify listeners
-                                        onCompleteHandlerListeners.forEach(OnCompleteHandler::onComplete);
-                                    }
-                                }
+        webSocketEndpoint.addMessageListener((msg) -> {
+            // interested only in this message
+            if (msg.getT() == MsgType.TRADING_QUOTE) {
+                TradingQuoteMsg body = (TradingQuoteMsg) msg.getBody();
+                String currentProductId = body.getSecurityId();
+                // bot tracks only single product
+                if (currentProductId.equals(productId)) {
+                    String currentPriceText = body.getCurrentPrice();
+                    Float currentPrice = Float.parseFloat(currentPriceText);
+                    // if price not set - buy first price
+                    buyPrice = buyPrice == null ? currentPrice : buyPrice;
+                    if (currentPositionId == null && buyPrice <= currentPrice) {
+                        // OK, buy order
+                        // as said: amount, leverage doesn't matter and direction=BUY always for now
+                        LOGGER.info("Buying order for product: " + productId);
+                        Result<BuyOrderResponse> buyOrderResult = orderService.buyOrder(productId, 200f, 1, DirectionType.BUY);
+                        if (buyOrderResult.isSuccessful()) {
+                            BuyOrderResponse buyOrderResponse = buyOrderResult.getData();
+                            // get currentPositionId and price
+                            LOGGER.info("Position opened for product: " + productId + " , price=" + buyOrderResponse.getPrice().getAmount());
+                            currentPositionId = buyOrderResponse.getPositionId();
+                        } else {
+                            LOGGER.error("Cannot buy order: " + buyOrderResult.getErrorMsg());
+                        }
+                    } else {
+                        // check if price is outside bounds
+                        lowerLimit = lowerLimit == null ? buyPrice - 1: lowerLimit;
+                        upperLimit = upperLimit == null ? buyPrice + 1 : upperLimit;
+                        LOGGER.info("buy price = " + buyPrice + " , lower limit = " + lowerLimit
+                                + " , current price = " + currentPrice + " , " + " , upper limit = " + upperLimit );
+                        if (currentPrice < lowerLimit || currentPrice > upperLimit) {
+                            // if yes - close position and unsubscribe
+                            if (currentPrice < lowerLimit) {
+                                LOGGER.info("Price is lower then lower limit: " + currentPrice + " < " + lowerLimit + " - closing position");
+                            } else {
+                                LOGGER.info("Price is more then upper limit: " + currentPrice + " > " + upperLimit + " - closing position");
                             }
+                            LOGGER.info("Selling order: " + currentPositionId);
+                            Result<SellOrderResponse> sellOrderResponseResult = orderService.sellOrder(currentPositionId);
+                            if (sellOrderResponseResult.isSuccessful()) {
+                                Float profitAndLoss = sellOrderResponseResult.getData().getProfitAndLoss().getAmount();
+                                LOGGER.info("Profit and loss: " + profitAndLoss);
+                                onProfitAndLossListeners.forEach((handler) -> handler.onProfitAndLoss(profitAndLoss));
+                            }
+
+
+                            // notify listeners
+                            onCompleteListenerListeners.forEach(OnCompleteListener::onComplete);
+                        }
                     }
                 }
-            } catch (IOException e) {
-                e.printStackTrace();
             }
         });
 
@@ -141,18 +121,18 @@ public class TradingBot {
 
     public void stop() {
         LOGGER.info("Force stopping trading bot for position: " + currentPositionId);
-        onCompleteHandlerListeners.clear();
+        onCompleteListenerListeners.clear();
     }
 
-    public void addOnCompleteListener(OnCompleteHandler listener) {
-        onCompleteHandlerListeners.add(listener);
+    public void addOnCompleteListener(OnCompleteListener listener) {
+        onCompleteListenerListeners.add(listener);
     }
 
     public void addOnProfitAndLossListener(OnProfitAndLossListener listener) {
         onProfitAndLossListeners.add(listener);
     }
 
-    public interface OnCompleteHandler {
+    public interface OnCompleteListener {
         void onComplete();
     }
 
