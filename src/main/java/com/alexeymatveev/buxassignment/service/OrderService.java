@@ -50,8 +50,8 @@ public class OrderService {
                 .build();
     }
 
-    public Result<BuyOrderResponse> buyOrder(String productId, Float amount, Integer leverage) {
-        BuyOrderRequest order = new BuyOrderRequest(productId, new Price(CurrencyType.BUX, 2, amount), leverage, DirectionType.BUY);
+    public Result<BuyOrderResponse> buyOrder(String productId, Float amount, Integer leverage, DirectionType directionType) {
+        BuyOrderRequest order = new BuyOrderRequest(productId, new Price(CurrencyType.BUX, 2, amount), leverage, directionType);
         try {
             Request request = new Request.Builder()
                     .url(buyOrderUrl)

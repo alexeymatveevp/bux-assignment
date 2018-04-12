@@ -7,9 +7,9 @@ import java.util.List;
  */
 public class SubscribeMsg {
 
-    List<String> subscribeTo;
+    private List<String> subscribeTo;
 
-    List<String> unsubscribeFrom;
+    private List<String> unsubscribeFrom;
 
     public SubscribeMsg(List<String> subscribeTo, List<String> unsubscribeFrom) {
         this.subscribeTo = subscribeTo;
