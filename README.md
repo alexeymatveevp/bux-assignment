@@ -12,6 +12,8 @@ There are several launchers in this repo:
 
 `MultipleBotsStarter` starts multiple bots for each product in parallel, so the user has multiple positions opened at the same time; there is 1 web socket connection though with many `onMessageListeners`; program stops after several cycles
 
+Also there are several **tests** but not many.
+
 ## About the app
 
 I've set some logging levels to INFO just for demonstration purposes - so that the person who will launch the app (you :)) can see what's happening. Some of those loggers I would normally set to DEBUG.
