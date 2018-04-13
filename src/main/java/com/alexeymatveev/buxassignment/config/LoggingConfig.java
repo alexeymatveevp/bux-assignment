@@ -7,7 +7,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Init SLF4J logging bridge.
+ * Init SLF4J logging bridge. Required to be called at app startup.
  *
  * Created by Alexey Matveev on 4/10/2018.
  */
@@ -19,7 +19,6 @@ public class LoggingConfig {
         try {
             SLF4JBridgeHandler.removeHandlersForRootLogger();
             SLF4JBridgeHandler.install();
-//            Logger.getLogger("").setLevel(Level.FINEST); // Root logger, for example.
         } catch (Throwable t) {
             t.printStackTrace();
         }

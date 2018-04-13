@@ -1,7 +1,7 @@
 package com.alexeymatveev.buxassignment.websocket;
 
+import com.alexeymatveev.buxassignment.config.AppConfig;
 import com.alexeymatveev.buxassignment.config.CommonObjectMapper;
-import com.alexeymatveev.buxassignment.config.WebsocketConfig;
 import com.alexeymatveev.buxassignment.model.message.BaseTMsg;
 import com.alexeymatveev.buxassignment.model.message.MsgType;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,12 +24,16 @@ public class BUXWebsocketClientEndpoint {
 
     private ObjectMapper objectMapper = new CommonObjectMapper();
 
+    /** Web socket connection endpoint. */
     private URI endpointURI;
 
+    /** Currently opened session. */
     private Session session;
 
+    /** List of onMessage listeners. */
     private List<OnMessageHandler> onMessageHandlerListeners = new CopyOnWriteArrayList<>();
 
+    /** List of onConnected listeners. */
     private List<OnConnectedListener> onConnectedListeners = new CopyOnWriteArrayList<>();
 
     /** Identifies whether "connect.conencted" message is already received. */
@@ -39,6 +43,9 @@ public class BUXWebsocketClientEndpoint {
         this.endpointURI = endpointURI;
     }
 
+    /**
+     * Connects to web socket.
+     */
     public void connect() {
         try {
             WebSocketContainer container = ContainerProvider.getWebSocketContainer();
@@ -48,9 +55,26 @@ public class BUXWebsocketClientEndpoint {
         }
     }
 
+    /**
+     * Closes connection.
+     * @throws IOException
+     */
     public void close() throws IOException {
         LOGGER.debug("Closing web socket connection.");
         this.session.close();
+    }
+
+    /**
+     * Sends the message over web socket.
+     * @param message
+     */
+    public void sendMessage(String message) {
+        LOGGER.debug("Sending message: "+ message);
+        session.getAsyncRemote().sendText(message);
+    }
+
+    public boolean isConnected() {
+        return connected;
     }
 
     @OnOpen
@@ -65,6 +89,10 @@ public class BUXWebsocketClientEndpoint {
         session = null;
     }
 
+    /**
+     * Waits for connected message and when received starts notifying listeners.
+     * @param message
+     */
     @OnMessage
     public void onMessage(String message) {
         LOGGER.debug("Receiving message: " + message);
@@ -108,11 +136,6 @@ public class BUXWebsocketClientEndpoint {
         onMessageHandlerListeners.remove(handler);
     }
 
-    public void sendMessage(String message) {
-        LOGGER.debug("Sending message: "+ message);
-        session.getAsyncRemote().sendText(message);
-    }
-
     public interface OnMessageHandler {
         void handleMessage(BaseTMsg message);
     }
@@ -120,4 +143,5 @@ public class BUXWebsocketClientEndpoint {
     public interface OnConnectedListener {
         void onConnected();
     }
+
 }

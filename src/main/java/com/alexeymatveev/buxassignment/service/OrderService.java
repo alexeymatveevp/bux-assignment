@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 
 /**
+ * Service
+ *
  * Created by Alexey Matveev on 4/10/2018.
  */
 public class OrderService {

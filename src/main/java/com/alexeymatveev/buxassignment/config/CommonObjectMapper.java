@@ -12,6 +12,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.io.IOException;
 
 /**
+ * Customized object mapper.
+ *
  * Created by Alexey Matveev on 4/10/2018.
  */
 public class CommonObjectMapper extends ObjectMapper {
@@ -27,17 +29,20 @@ public class CommonObjectMapper extends ObjectMapper {
 
         // custom deser. module
         SimpleModule customDeserializersModule = new SimpleModule();
-        customDeserializersModule.addDeserializer(BaseTMsg.class, new BaseMsgDeserializer());
+        customDeserializersModule.addDeserializer(BaseTMsg.class, new BaseTMsgDeserializer());
         this.registerModule(customDeserializersModule);
     }
 
-    class BaseMsgDeserializer extends StdDeserializer<BaseTMsg> {
+    /**
+     * Deserializer for web socket T-based messages.
+     */
+    class BaseTMsgDeserializer extends StdDeserializer<BaseTMsg> {
 
-        public BaseMsgDeserializer() {
+        BaseTMsgDeserializer() {
             this(null);
         }
 
-        private BaseMsgDeserializer(Class<?> vc) {
+        private BaseTMsgDeserializer(Class<?> vc) {
             super(vc);
         }
 
@@ -57,6 +62,7 @@ public class CommonObjectMapper extends ObjectMapper {
                             bodyMsg = treeToValue(data, ErrorMsg.class);
                             break;
                         case CONNECT_CONNECTED:
+                            // not interested in body right now
                             bodyMsg = new EmptyMsg();
                             break;
                         case TRADING_QUOTE:

@@ -1,6 +1,8 @@
 package com.alexeymatveev.buxassignment.model;
 
 /**
+ * Result with either body (data) or error message.
+ *
  * Created by Alexey Matveev on 4/10/2018.
  */
 public class Result<T> {
